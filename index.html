@@ -187,6 +187,43 @@
   @keyframes btnshine { to { background-position: 200%; } }
   @keyframes shake { 20%,60% { transform: translateX(-6px); } 40%,80% { transform: translateX(6px); } }
 
+  /* Database section */
+  .db-section { margin-top: 26px; border-top: 1px solid rgba(255,255,255,.1); padding-top: 20px; }
+  .db-head { display: flex; justify-content: space-between; align-items: center; font-size: .85rem; color: rgba(255,255,255,.7); margin-bottom: 12px; }
+  .icon-btn.small { width: 30px; height: 30px; font-size: .85rem; }
+  #labelInput {
+    width: 100%; padding: 11px 14px; margin-bottom: 10px;
+    background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px; color: #fff; font-size: .85rem; outline: none;
+    transition: border .25s;
+  }
+  #labelInput:focus { border-color: var(--accent2); }
+  #labelInput::placeholder { color: rgba(255,255,255,.35); }
+  .save-btn {
+    width: 100%; padding: 11px; margin-bottom: 14px;
+    border: 1px solid rgba(6,182,212,.4); border-radius: 10px;
+    background: rgba(6,182,212,.1); color: var(--accent2);
+    font-size: .85rem; font-weight: 600; cursor: pointer;
+    transition: all .25s;
+  }
+  .save-btn:hover { background: rgba(6,182,212,.25); transform: translateY(-2px); }
+  .save-btn:active { transform: scale(.97); }
+  .db-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .db-item {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px; padding: 9px 12px; font-size: .8rem;
+    animation: rise .3s ease both;
+  }
+  .db-item .d-label { color: var(--accent2); font-weight: 600; min-width: 70px; }
+  .db-item .d-pwd { flex: 1; font-family: Consolas, monospace; color: rgba(255,255,255,.8); word-break: break-all; }
+  .db-item .d-date { color: rgba(255,255,255,.35); font-size: .7rem; white-space: nowrap; }
+  .db-item button { background: none; border: none; cursor: pointer; font-size: .9rem; padding: 2px 5px; transition: transform .15s; }
+  .db-item button:hover { transform: scale(1.25); }
+  .db-empty { text-align: center; color: rgba(255,255,255,.3); font-size: .8rem; padding: 14px 0; }
+  .db-list::-webkit-scrollbar { width: 5px; }
+  .db-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 3px; }
+
   /* Floating symbols decoration */
   .float-char {
     position: fixed; font-family: monospace; font-size: 1.2rem;
@@ -234,6 +271,16 @@
     </div>
 
     <button class="generate-btn" id="genBtn">✨ Generate Password</button>
+
+    <div class="db-section">
+      <div class="db-head">
+        <span>🗄️ Saved Passwords</span>
+        <button class="icon-btn small" id="clearDb" title="Clear all">🗑️</button>
+      </div>
+      <input type="text" id="labelInput" placeholder="Label (e.g. Gmail, WiFi...)" />
+      <button class="save-btn" id="saveBtn">💾 Save Password</button>
+      <div id="dbList" class="db-list"></div>
+    </div>
   </div>
 
 <script>
@@ -328,6 +375,84 @@
     strength();
   }));
 
+  // ---------- Local database (localStorage) ----------
+  const DB_KEY = 'securepass_db';
+  const labelInput = document.getElementById('labelInput');
+  const saveBtn = document.getElementById('saveBtn');
+  const clearDb = document.getElementById('clearDb');
+  const dbList = document.getElementById('dbList');
+
+  function loadDb() {
+    try { return JSON.parse(localStorage.getItem(DB_KEY)) || []; }
+    catch { return []; }
+  }
+  function persistDb(data) { localStorage.setItem(DB_KEY, JSON.stringify(data)); }
+
+  function esc(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderDb() {
+    const data = loadDb();
+    if (!data.length) {
+      dbList.innerHTML = '<div class="db-empty">No saved passwords yet</div>';
+      return;
+    }
+    dbList.innerHTML = data.slice().reverse().map((item, idx) => {
+      const realIdx = data.length - 1 - idx;
+      return `<div class="db-item">
+        <span class="d-label">${esc(item.label)}</span>
+        <span class="d-pwd">${esc(item.password)}</span>
+        <span class="d-date">${item.date}</span>
+        <button data-act="copy" data-i="${realIdx}" title="Copy">📋</button>
+        <button data-act="del" data-i="${realIdx}" title="Delete">✖️</button>
+      </div>`;
+    }).join('');
+  }
+
+  saveBtn.addEventListener('click', () => {
+    const pwd = passwordEl.textContent;
+    if (!pwd || pwd === 'Click Generate...') {
+      saveBtn.textContent = 'Generate first!';
+      setTimeout(() => saveBtn.textContent = '💾 Save Password', 1200);
+      return;
+    }
+    const data = loadDb();
+    data.push({
+      label: labelInput.value.trim() || 'Password',
+      password: pwd,
+      date: new Date().toLocaleDateString()
+    });
+    persistDb(data);
+    labelInput.value = '';
+    saveBtn.textContent = '✅ Saved!';
+    setTimeout(() => saveBtn.textContent = '💾 Save Password', 1200);
+    renderDb();
+  });
+
+  dbList.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const data = loadDb();
+    const item = data[+btn.dataset.i];
+    if (btn.dataset.act === 'copy') {
+      navigator.clipboard.writeText(item.password);
+      btn.textContent = '✅';
+      setTimeout(renderDb, 800);
+    } else {
+      data.splice(+btn.dataset.i, 1);
+      persistDb(data);
+      renderDb();
+    }
+  });
+
+  clearDb.addEventListener('click', () => {
+    if (confirm('Delete ALL saved passwords?')) {
+      localStorage.removeItem(DB_KEY);
+      renderDb();
+    }
+  });
+
   genBtn.addEventListener('click', generate);
   regenBtn.addEventListener('click', generate);
   copyBtn.addEventListener('click', () => {
@@ -340,6 +465,7 @@
   });
 
   generate();
+  renderDb();
 </script>
 </body>
 </html>
